@@ -10,7 +10,7 @@
 
 Make pasting (and on desktop, dropping) URLs and non-media files into Obsidian notes produce more readable results:
 
-- URLs → embed preview cards (same source format / visual style as [obsidian-link-embed](https://github.com/seraphli/obsidian-link-embed)), Markdown links, or plain text.
+- URLs → **web page card** (`embed` code block; same source format / visual style as [obsidian-link-embed](https://github.com/seraphli/obsidian-link-embed)), **video preview** (`![title](url)`), Markdown links, or plain text.
 - Non-image / non-audio / non-video files → `[[path|filename.ext]]` or Obsidian default paste/drop.
 - Everything else → leave to Obsidian (no interception).
 
@@ -61,7 +61,7 @@ tests/
 **Data flow**
 
 1. Editor paste/drop → `paste/` classifies content.
-2. URL on empty line → suggest menu or auto-embed → `parsers/` → write ` ```embed ` block → `embed/` renders.
+2. URL on empty line → suggest menu or auto-embed → for web page card: `parsers/` → write ` ```embed ` block → `embed/` renders; for video preview / Markdown link: parse title then insert the corresponding Markdown.
 3. Non-media file → suggest menu or auto filename-link → `files/` copies into Obsidian attachment path → insert `[[path|filename.ext]]`.
 4. Other content → do not intercept.
 
@@ -81,15 +81,18 @@ Applies only in Markdown editor views. Media detection uses common image/audio/v
 
 ### 5.2 URL — auto-embed off
 
-Empty-line paste/drop of a URL → suggestion menu:
+Empty-line paste/drop of a URL → suggestion menu (order as listed):
 
-1. **Create embed preview** — parse with Local, fall back to MicroLink; replace the line with an `embed` code block.
-2. **Create Markdown link** — `[title](url)`; title from parse result, or hostname on failure.
-3. **Paste as plain text** — keep the raw URL string.
+1. **创建网页卡片 / Create web page card** — parse with Local, fall back to MicroLink; replace the line with an `embed` code block (behavior unchanged from former “embed preview”).
+2. **创建视频预览 / Create video preview** — insert `![title](url)`; title from parse result, or hostname on failure.
+3. **创建 Markdown 链接 / Create Markdown link** — `[title](url)`; title from parse result, or hostname on failure.
+4. **粘贴纯文本 / Paste as plain text** — keep the raw URL string.
+
+Video preview is always offered for any URL in this menu (not limited to known video hosts). Rendering of `![...](...)` follows Obsidian’s normal image/video embed rules.
 
 ### 5.3 URL — auto-embed on
 
-Create embed preview immediately (no menu).
+Create **web page card** immediately (no menu). Video preview is menu-only unless chosen via a future command (not in v1 auto path).
 
 ### 5.4 Non-media file — auto-embed off
 
@@ -106,7 +109,9 @@ Always create the filename link (option 1 above).
 
 When copying/downloading files, if the target name exists, append a numeric suffix (e.g. `image 1.png`).
 
-## 6. Embed format & card UI
+## 6. Web page card format & UI
+
+User-facing name: **网页卡片** (en: **web page card**). Internally still an `embed` code block.
 
 ### 6.1 Source format
 
@@ -146,16 +151,16 @@ Preview rendering and CSS should match Link Embed’s card look.
 
 Command palette (basic set):
 
-1. `Embed Link: Embed current URL` — URL from selection, URL under cursor, or clipboard; then embed.
-2. `Embed Link: Embed with Local`
-3. `Embed Link: Embed with MicroLink`
+1. `Embed Link: Create web page card` — URL from selection, URL under cursor, or clipboard; then create a web page card.
+2. `Embed Link: Create web page card with Local`
+3. `Embed Link: Create web page card with MicroLink`
 
 ## 9. Settings
 
 | Setting | Default | Notes |
 |---------|---------|-------|
-| Auto embed | off | On: URL → embed; non-media file → filename link. Off: show menus |
-| Download embed images to vault | off | Download card cover images into vault |
+| Auto embed | off | On: URL → web page card; non-media file → filename link. Off: show menus |
+| Download embed images to vault | off | Download web page card cover images into vault |
 | Image save path | empty | Empty = Obsidian default attachment path; relative paths supported |
 | Keep original image aspect ratio | on | Persist/use `aspectRatio` |
 | Cache favicons and aspect ratios | on | Cache to reduce repeat work |
@@ -196,7 +201,8 @@ Vitest unit/integration coverage for:
 - Empty line vs non-empty line
 - Auto-embed on/off branches
 - Wiki link format `[[path|filename.ext]]`
-- Embed code-block serialize / parse
+- Video preview format `![title](url)`
+- Web page card (`embed`) serialize / parse
 - Settings normalization (empty image path → Obsidian attachment path)
 
 ## 13. Implementation strategy
@@ -221,3 +227,5 @@ Vitest unit/integration coverage for:
 | Drag-and-drop | Same as paste on desktop; mobile paste only |
 | Platform | Desktop + mobile |
 | MicroLink API Key | Configurable setting |
+| URL menu: rename | “嵌入预览” → “网页卡片” (en: web page card); behavior unchanged |
+| URL menu: video preview | New option → `![title](url)`; title from parser or hostname |
