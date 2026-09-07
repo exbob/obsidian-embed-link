@@ -246,7 +246,8 @@ async function writeEditedSource(
 ): Promise<void> {
   const range = resolveBlockRange(plugin, el, ctx);
   if (!range) {
-    renderEmbed(plugin, edited, el, ctx);
+    notifyMissingBlockRange();
+    renderEmbed(plugin, original, el, ctx);
     return;
   }
   try {
@@ -315,6 +316,7 @@ async function deleteEmbed(
 ): Promise<void> {
   const range = resolveBlockRange(plugin, el, ctx);
   if (!range) {
+    notifyMissingBlockRange();
     return;
   }
   const content = await plugin.app.vault.read(range.file);
@@ -329,6 +331,11 @@ async function refreshEmbed(
   el: HTMLElement,
   ctx: MarkdownPostProcessorContext,
 ): Promise<void> {
+  const range = resolveBlockRange(plugin, el, ctx);
+  if (!range) {
+    notifyMissingBlockRange();
+    return;
+  }
   if (!data.url) {
     new Notice(t("notice.parseFailed", { detail: "missing url" }));
     return;
@@ -340,10 +347,6 @@ async function refreshEmbed(
       app: plugin.app,
       persistCache: () => plugin.saveSettings(),
     });
-    const range = resolveBlockRange(plugin, el, ctx);
-    if (!range) {
-      return;
-    }
     const content = await plugin.app.vault.read(range.file);
     const updated = replaceEmbedBlockInMarkdown(
       content,
@@ -356,6 +359,10 @@ async function refreshEmbed(
     const detail = error instanceof Error ? error.message : String(error);
     new Notice(t("notice.parseFailed", { detail }));
   }
+}
+
+function notifyMissingBlockRange(): void {
+  new Notice(t("notice.parseFailed", { detail: "missing block range" }));
 }
 
 function resolveBlockRange(

@@ -1,9 +1,17 @@
-import { describe, it, expect } from "vitest";
-import { App, type PluginManifest } from "obsidian";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { App, Notice, type PluginManifest } from "obsidian";
 import { CARD_ACTION_ORDER } from "../src/embed/actions";
 import { registerEmbedProcessor } from "../src/embed/processor";
 import EmbedLinkPlugin from "../src/main";
+import * as parsers from "../src/parsers";
 import { DEFAULT_SETTINGS } from "../src/settings";
+import { t } from "../src/i18n";
+
+type NoticeWithLog = typeof Notice & { messages: string[] };
+
+function noticeLog(): string[] {
+  return (Notice as NoticeWithLog).messages;
+}
 
 const MANIFEST: PluginManifest = {
   id: "embed-link",
@@ -50,7 +58,17 @@ url: "https://example.com"
 favicon: "https://example.com/favicon.ico"
 aspectRatio: "1.5"`;
 
+async function flush(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 describe("card actions", () => {
+  beforeEach(() => {
+    noticeLog().length = 0;
+    document.body.replaceChildren();
+  });
+
   it("orders bottom actions delete, copy, refresh", () => {
     expect(CARD_ACTION_ORDER).toEqual(["delete", "copy", "refresh"]);
   });
@@ -103,5 +121,38 @@ describe("card actions", () => {
     const plugin = makePlugin();
     await plugin.onload();
     expect(plugin.markdownProcessors[0]?.language).toBe("embed");
+  });
+
+  it("notices and restores original preview when edit cannot locate the block", async () => {
+    const el = processEmbed(makePlugin(), SAMPLE);
+    (el.querySelector(".embed-link-edit") as HTMLButtonElement).click();
+    const textarea = el.querySelector("textarea") as HTMLTextAreaElement;
+    textarea.value = SAMPLE.replace("Example", "Changed");
+    textarea.dispatchEvent(new Event("blur"));
+    await flush();
+    expect(el.querySelector(".embed-link-thl")?.textContent).toBe("Example");
+    expect(noticeLog()).toContain(t("notice.parseFailed", { detail: "missing block range" }));
+  });
+
+  it("notices and skips delete when block range is missing", async () => {
+    const el = processEmbed(makePlugin(), SAMPLE);
+    (el.querySelector(".embed-link-delete") as HTMLButtonElement).click();
+    (document.querySelector("button.mod-warning") as HTMLButtonElement).click();
+    await flush();
+    expect(el.querySelector(".embed-link-card")).not.toBeNull();
+    expect(noticeLog()).toContain(t("notice.parseFailed", { detail: "missing block range" }));
+  });
+
+  it("notices and skips refresh network when block range is missing", async () => {
+    const parseSpy = vi.spyOn(parsers, "parseUrl");
+    try {
+      const el = processEmbed(makePlugin(), SAMPLE);
+      (el.querySelector(".embed-link-refresh") as HTMLButtonElement).click();
+      await flush();
+      expect(parseSpy).not.toHaveBeenCalled();
+      expect(noticeLog()).toContain(t("notice.parseFailed", { detail: "missing block range" }));
+    } finally {
+      parseSpy.mockRestore();
+    }
   });
 });
