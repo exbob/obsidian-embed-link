@@ -21,6 +21,7 @@ export class Plugin {
     name: string;
     callback?: () => unknown;
     checkCallback?: (checking: boolean) => boolean | void;
+    editorCallback?: (editor: unknown, view?: unknown) => unknown;
   }> = [];
   readonly registeredEvents: unknown[] = [];
   readonly registeredCleanups: Array<() => unknown> = [];
@@ -37,6 +38,7 @@ export class Plugin {
     name: string;
     callback?: () => unknown;
     checkCallback?: (checking: boolean) => boolean | void;
+    editorCallback?: (editor: unknown, view?: unknown) => unknown;
   }): typeof command {
     this.commands.push(command);
     return command;
@@ -158,11 +160,49 @@ export class Modal {
   }
 }
 
+export class ToggleComponent {
+  value = false;
+  changeHandler: ((value: boolean) => unknown) | null = null;
+
+  setValue(value: boolean): this {
+    this.value = value;
+    return this;
+  }
+
+  onChange(cb: (value: boolean) => unknown): this {
+    this.changeHandler = cb;
+    return this;
+  }
+}
+
+export class TextComponent {
+  value = "";
+  placeholder = "";
+  changeHandler: ((value: string) => unknown) | null = null;
+
+  setValue(value: string): this {
+    this.value = value;
+    return this;
+  }
+
+  setPlaceholder(placeholder: string): this {
+    this.placeholder = placeholder;
+    return this;
+  }
+
+  onChange(cb: (value: string) => unknown): this {
+    this.changeHandler = cb;
+    return this;
+  }
+}
+
 export class Setting {
   settingEl: HTMLElement;
   nameEl: HTMLElement;
   descEl: HTMLElement;
   controlEl: HTMLElement;
+  toggles: ToggleComponent[] = [];
+  texts: TextComponent[] = [];
 
   constructor(containerEl: HTMLElement) {
     this.settingEl = document.createElement("div");
@@ -170,6 +210,7 @@ export class Setting {
     this.descEl = document.createElement("div");
     this.controlEl = document.createElement("div");
     this.settingEl.append(this.nameEl, this.descEl, this.controlEl);
+    (this.settingEl as HTMLElement & { _setting?: Setting })._setting = this;
     containerEl.appendChild(this.settingEl);
   }
 
@@ -187,11 +228,17 @@ export class Setting {
     return this;
   }
 
-  addToggle(_cb: (component: unknown) => unknown): this {
+  addToggle(cb: (component: ToggleComponent) => unknown): this {
+    const component = new ToggleComponent();
+    cb(component);
+    this.toggles.push(component);
     return this;
   }
 
-  addText(_cb: (component: unknown) => unknown): this {
+  addText(cb: (component: TextComponent) => unknown): this {
+    const component = new TextComponent();
+    cb(component);
+    this.texts.push(component);
     return this;
   }
 }
