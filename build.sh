@@ -28,7 +28,9 @@ if [[ "$node_major" -lt 18 ]]; then
   exit 1
 fi
 
-npm run build
+# Call esbuild via node so Git Bash does not depend on the Windows `npm` shim
+# (`npm` can fail with "No such file or directory"; `npm.cmd` is PowerShell/cmd).
+node esbuild.config.mjs production
 
 STAGING_DIR="$(mktemp -d "$ROOT_DIR/embed-link.staging.XXXXXX")"
 BACKUP_DIR=""
