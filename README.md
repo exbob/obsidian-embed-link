@@ -79,7 +79,7 @@ Hover a web page card:
 | Top-right | **Edit this block** (Obsidian built-in) | Edit the `embed` code block source |
 | Bottom-right (top → bottom) | **Refresh** | Re-parse the URL and update the block |
 | | **Copy** | Copy the embed source to the clipboard |
-| | **Delete** | Confirm, then remove the block |
+| | **Delete** | Confirm, then remove the block and any local preview image file |
 
 ## Settings
 

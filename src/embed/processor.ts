@@ -5,7 +5,9 @@ import {
   type MarkdownPostProcessorContext,
 } from "obsidian";
 import type EmbedLinkPlugin from "../main";
+import { clearCacheForImagePaths } from "../cache/store";
 import { t, type MessageKey } from "../i18n";
+import { deleteLocalEmbedImage, resolveVaultImageFile } from "../media/vault-image";
 import { parseUrl } from "../parsers";
 import {
   CARD_ACTION_ORDER,
@@ -195,31 +197,11 @@ function resolveImageSrc(plugin: EmbedLinkPlugin, image: string, sourcePath: str
   if (/^(https?:|data:|app:)/i.test(image)) {
     return image;
   }
-  const file = resolveVaultImage(plugin, image, sourcePath);
+  const file = resolveVaultImageFile(plugin.app, image, sourcePath);
   if (file) {
     return plugin.app.vault.getResourcePath(file);
   }
   return image;
-}
-
-function resolveVaultImage(
-  plugin: EmbedLinkPlugin,
-  image: string,
-  sourcePath: string,
-): TFile | null {
-  const direct = plugin.app.vault.getAbstractFileByPath(image);
-  if (direct instanceof TFile) {
-    return direct;
-  }
-  const fromLink = plugin.app.metadataCache?.getFirstLinkpathDest?.(image, sourcePath);
-  if (fromLink instanceof TFile) {
-    return fromLink;
-  }
-  const slash = sourcePath.lastIndexOf("/");
-  const noteDir = slash >= 0 ? sourcePath.slice(0, slash) : "";
-  const joined = noteDir ? `${noteDir}/${image}` : image;
-  const relative = plugin.app.vault.getAbstractFileByPath(joined);
-  return relative instanceof TFile ? relative : null;
 }
 
 async function handleAction(
@@ -232,7 +214,7 @@ async function handleAction(
 ): Promise<void> {
   switch (action) {
     case "delete":
-      openDeleteConfirmModal(plugin.app, () => deleteEmbed(plugin, el, ctx));
+      openDeleteConfirmModal(plugin.app, () => deleteEmbed(plugin, data, el, ctx));
       return;
     case "copy":
       await copyEmbed(plugin, source, el, ctx);
@@ -269,6 +251,7 @@ async function copyEmbed(
 
 async function deleteEmbed(
   plugin: EmbedLinkPlugin,
+  data: WebPageCardData,
   el: HTMLElement,
   ctx: MarkdownPostProcessorContext,
 ): Promise<void> {
@@ -277,6 +260,19 @@ async function deleteEmbed(
     notifyMissingBlockRange();
     return;
   }
+
+  const sourcePath = range.file.path;
+  const resolved = resolveVaultImageFile(plugin.app, data.image, sourcePath);
+  const imageResult = await deleteLocalEmbedImage(plugin.app, data.image, sourcePath);
+  if (imageResult === "failed") {
+    new Notice(t("notice.parseFailed", { detail: "failed to delete preview image" }));
+  } else if (imageResult === "deleted" && resolved) {
+    const cleared = clearCacheForImagePaths(plugin.settings, [data.image, resolved.path]);
+    if (cleared) {
+      await plugin.saveSettings();
+    }
+  }
+
   const content = await plugin.app.vault.read(range.file);
   const next = deleteEmbedBlockInMarkdown(content, range.lineStart, range.lineEnd);
   await plugin.app.vault.modify(range.file, next);

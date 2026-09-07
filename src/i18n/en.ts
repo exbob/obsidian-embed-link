@@ -38,6 +38,7 @@ export const en: Record<MessageKey, string> = {
   "notice.deleteConfirm": "Embed block deleted",
   "notice.copied": "Copied to clipboard",
   "modal.deleteTitle": "Delete embed",
-  "modal.deleteConfirm": "Delete this embed block?",
+  "modal.deleteConfirm":
+    "Delete this embed block? If it uses a local preview image, that file will be deleted too.",
   "modal.cancel": "Cancel",
 };

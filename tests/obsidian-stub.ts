@@ -246,6 +246,7 @@ export class Setting {
 export class Vault {
   private readonly existingFiles = new Map<string, TFile>();
   private readonly fileContents = new Map<string, string>();
+  readonly deletedPaths: string[] = [];
 
   addExistingFile(path: string): TFile {
     const file = new TFile(path);
@@ -268,6 +269,12 @@ export class Vault {
 
   async modify(file: TFile, data: string): Promise<void> {
     this.fileContents.set(file.path, data);
+  }
+
+  async delete(file: TFile): Promise<void> {
+    this.existingFiles.delete(file.path);
+    this.fileContents.delete(file.path);
+    this.deletedPaths.push(file.path);
   }
 
   getResourcePath(file: TFile): string {
@@ -307,6 +314,7 @@ export class App {
   fileManager: {
     getAvailablePathForAttachment: (filename: string, sourcePath?: string) => Promise<string>;
     generateMarkdownLink: (file: TFile, sourcePath: string) => string;
+    trashFile: (file: TFile) => Promise<void>;
   };
 
   constructor() {
@@ -317,6 +325,9 @@ export class App {
       generateMarkdownLink: (file: TFile, sourcePath: string) => {
         void sourcePath;
         return `[[${file.path}]]`;
+      },
+      trashFile: async (file: TFile) => {
+        await this.vault.delete(file);
       },
     };
   }

@@ -33,6 +33,6 @@ export const zh: Record<MessageKey, string> = {
   "notice.deleteConfirm": "已删除嵌入块",
   "notice.copied": "已复制到剪贴板",
   "modal.deleteTitle": "删除嵌入",
-  "modal.deleteConfirm": "确定删除此嵌入块？",
+  "modal.deleteConfirm": "确定删除此嵌入块？若使用了本地预览图，将一并删除该图片文件。",
   "modal.cancel": "取消",
 };

@@ -136,6 +136,50 @@ describe("card actions", () => {
     expect(noticeLog()).toContain(t("notice.parseFailed", { detail: "missing block range" }));
   });
 
+  it("deletes the local preview image when deleting a card", async () => {
+    const plugin = makePlugin();
+    plugin.settings.useCache = true;
+    plugin.settings.cache = {
+      "https://cdn.example/cover.png": "Test/attachments/cover.png",
+    };
+    const vault = plugin.app.vault as App["vault"] & {
+      addExistingFile: (path: string) => { path: string };
+      deletedPaths: string[];
+    };
+    const note = vault.addExistingFile("Test/index.md");
+    vault.addExistingFile("Test/attachments/cover.png");
+    const block = `\`\`\`embed
+title: "Example"
+image: "attachments/cover.png"
+description: ""
+url: "https://example.com"
+\`\`\``;
+    await plugin.app.vault.modify(note as never, `before\n${block}\nafter\n`);
+    const source = `title: "Example"
+image: "attachments/cover.png"
+description: ""
+url: "https://example.com"`;
+    const el = document.createElement("div");
+    registerEmbedProcessor(plugin);
+    plugin.markdownProcessors[0].handler(source, el, {
+      docId: "doc",
+      sourcePath: "Test/index.md",
+      frontmatter: null,
+      addChild: () => {},
+      getSectionInfo: () => ({ text: block, lineStart: 1, lineEnd: 6 }),
+    });
+    (el.querySelector(".embed-link-delete") as HTMLElement).click();
+    expect(document.body.textContent).toContain(t("modal.deleteConfirm"));
+    (document.querySelector("button.mod-warning") as HTMLButtonElement).click();
+    await flush();
+    await flush();
+    expect(plugin.app.vault.getAbstractFileByPath("Test/attachments/cover.png")).toBeNull();
+    expect(vault.deletedPaths).toContain("Test/attachments/cover.png");
+    expect(await plugin.app.vault.read(note as never)).toBe("before\nafter\n");
+    expect(plugin.settings.cache).toEqual({});
+    expect(noticeLog()).toContain(t("notice.deleteConfirm"));
+  });
+
   it("notices and skips refresh network when block range is missing", async () => {
     const parseSpy = vi.spyOn(parsers, "parseUrl");
     try {
