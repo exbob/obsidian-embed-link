@@ -74,13 +74,24 @@ export class Plugin {
     this.markdownProcessors.push({ language, handler });
   }
 
-  registerEditorSuggest(_suggest: unknown): void {}
+  readonly editorSuggests: unknown[] = [];
+
+  registerEditorSuggest(suggest: unknown): void {
+    this.editorSuggests.push(suggest);
+  }
 
   onunload(): void {}
 }
 
 export class EditorSuggest<T> {
-  constructor(_app: unknown) {}
+  app: unknown;
+  context: unknown = null;
+
+  constructor(app: unknown) {
+    this.app = app;
+  }
+
+  open(): void {}
 
   close(): void {}
 }
@@ -200,6 +211,10 @@ export class Vault {
     return this.addExistingFile(path);
   }
 
+  async createBinary(path: string, _data: ArrayBuffer): Promise<TFile> {
+    return this.addExistingFile(path);
+  }
+
   async read(file: TFile): Promise<string> {
     return this.fileContents.get(file.path) ?? "";
   }
@@ -217,11 +232,46 @@ export class Vault {
   }
 }
 
+export class Workspace {
+  activeFile: TFile | null = null;
+  private readonly listeners = new Map<string, Array<(...args: unknown[]) => unknown>>();
+
+  getActiveFile(): TFile | null {
+    return this.activeFile;
+  }
+
+  on(name: string, callback: (...args: unknown[]) => unknown): { name: string } {
+    const list = this.listeners.get(name) ?? [];
+    list.push(callback);
+    this.listeners.set(name, list);
+    return { name };
+  }
+
+  trigger(name: string, ...args: unknown[]): void {
+    for (const callback of this.listeners.get(name) ?? []) {
+      callback(...args);
+    }
+  }
+}
+
 export class App {
   vault: Vault;
+  workspace: Workspace;
+  fileManager: {
+    getAvailablePathForAttachment: (filename: string, sourcePath?: string) => Promise<string>;
+    generateMarkdownLink: (file: TFile, sourcePath: string) => string;
+  };
 
   constructor() {
     this.vault = new Vault();
+    this.workspace = new Workspace();
+    this.fileManager = {
+      getAvailablePathForAttachment: async (filename: string) => filename,
+      generateMarkdownLink: (file: TFile, sourcePath: string) => {
+        void sourcePath;
+        return `[[${file.path}]]`;
+      },
+    };
   }
 }
 
