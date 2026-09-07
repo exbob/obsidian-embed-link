@@ -62,7 +62,17 @@ export class Plugin {
     this.settingTabs.push(settingTab);
   }
 
-  registerMarkdownCodeBlockProcessor(_lang: string, _cb: unknown): void {}
+  readonly markdownProcessors: Array<{
+    language: string;
+    handler: (source: string, el: HTMLElement, ctx: unknown) => Promise<unknown> | void;
+  }> = [];
+
+  registerMarkdownCodeBlockProcessor(
+    language: string,
+    handler: (source: string, el: HTMLElement, ctx: unknown) => Promise<unknown> | void,
+  ): void {
+    this.markdownProcessors.push({ language, handler });
+  }
 
   registerEditorSuggest(_suggest: unknown): void {}
 
@@ -177,6 +187,7 @@ export class Setting {
 
 export class Vault {
   private readonly existingFiles = new Map<string, TFile>();
+  private readonly fileContents = new Map<string, string>();
 
   addExistingFile(path: string): TFile {
     const file = new TFile(path);
@@ -184,8 +195,21 @@ export class Vault {
     return file;
   }
 
-  async create(path: string, _data: string): Promise<TFile> {
+  async create(path: string, data: string): Promise<TFile> {
+    this.fileContents.set(path, data);
     return this.addExistingFile(path);
+  }
+
+  async read(file: TFile): Promise<string> {
+    return this.fileContents.get(file.path) ?? "";
+  }
+
+  async modify(file: TFile, data: string): Promise<void> {
+    this.fileContents.set(file.path, data);
+  }
+
+  getResourcePath(file: TFile): string {
+    return file.path;
   }
 
   getAbstractFileByPath(path: string): TFile | null {
@@ -218,6 +242,10 @@ export class TFile {
 export const Platform = {
   isMobile: false,
 };
+
+export function setIcon(parent: HTMLElement, iconId: string): void {
+  parent.dataset.icon = iconId;
+}
 
 export async function requestUrl(
   _opts: unknown,

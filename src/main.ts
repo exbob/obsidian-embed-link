@@ -1,4 +1,5 @@
 import { Plugin } from "obsidian";
+import { registerEmbedProcessor } from "./embed/processor";
 import { DEFAULT_SETTINGS } from "./settings";
 import type { EmbedLinkSettings } from "./types";
 
@@ -10,6 +11,6 @@ export default class EmbedLinkPlugin extends Plugin {
   }
 
   async onload(): Promise<void> {
-    // Wired in later tasks. Call saveSettings() after parse mutates settings.cache.
+    registerEmbedProcessor(this);
   }
 }
