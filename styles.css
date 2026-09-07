@@ -81,17 +81,21 @@
 
 .embed-link-wt {
   padding: 8px 10px;
+  /* Reserve gutter for vertical action buttons (26px + edge offset). */
+  padding-right: 30px;
 }
 
 @media (min-width: 360px) {
   .embed-link-wt {
     padding: 12px 15px;
+    padding-right: 32px;
   }
 }
 
 @media (min-width: 600px) {
   .embed-link-wt {
     padding: 16px 20px;
+    padding-right: 34px;
   }
 }
 
@@ -388,23 +392,6 @@
   border-color: var(--background-modifier-border-focus);
 }
 
-.embed-link-edit {
-  position: absolute;
-  top: 5px;
-  right: 5px;
-  z-index: 30;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-  cursor: pointer;
-  background: transparent;
-  border: none;
-  padding: 0;
-  color: inherit;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
 .embed-link-buttons {
   position: absolute;
   bottom: 5px;
@@ -413,32 +400,50 @@
   opacity: 0;
   transition: opacity 0.2s ease;
   display: flex;
-  gap: 10px;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
 }
 
-.embed-link-delete,
-.embed-link-copy,
-.embed-link-refresh {
-  cursor: pointer;
+.embed-link-buttons .clickable-icon {
+  /* Slightly larger than default `.clickable-icon`; no border, hover darkens */
+  border: none !important;
+  box-shadow: none !important;
+  outline: none;
   background: transparent;
-  border: none;
   padding: 0;
-  color: inherit;
+  margin: 0;
+  cursor: pointer;
+  opacity: var(--icon-opacity, 0.85);
+  width: 26px;
+  height: 26px;
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: var(--radius-s, 4px);
 }
 
-.embed-link-card:hover .embed-link-buttons,
-.embed-link-card:hover .embed-link-edit {
-  opacity: 0.8;
+.embed-link-buttons .embed-link-delete {
+  color: var(--text-error);
 }
 
-.embed-link-edit:hover,
-.embed-link-refresh:hover,
-.embed-link-copy:hover,
-.embed-link-delete:hover {
-  opacity: 1 !important;
+.embed-link-buttons .embed-link-copy,
+.embed-link-buttons .embed-link-refresh {
+  color: var(--text-normal);
+}
+
+.embed-link-buttons .clickable-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.embed-link-card:hover .embed-link-buttons {
+  opacity: 1;
+}
+
+.embed-link-buttons .clickable-icon:hover {
+  background-color: var(--background-modifier-hover);
+  opacity: 1;
 }
 
 .embed-link-favicon {
@@ -448,15 +453,6 @@
   width: 16px;
   cursor: pointer;
   image-rendering: -webkit-optimize-contrast;
-}
-
-.embed-link-editor {
-  width: 100%;
-  min-height: 8em;
-  box-sizing: border-box;
-  font-family: var(--font-monospace);
-  font-size: var(--font-smaller);
-  padding: 8px;
 }
 
 .embed-link-modal-buttons {

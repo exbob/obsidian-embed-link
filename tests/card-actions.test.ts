@@ -69,15 +69,15 @@ describe("card actions", () => {
     document.body.replaceChildren();
   });
 
-  it("orders bottom actions delete, copy, refresh", () => {
-    expect(CARD_ACTION_ORDER).toEqual(["delete", "copy", "refresh"]);
+  it("orders bottom actions refresh, copy, delete", () => {
+    expect(CARD_ACTION_ORDER).toEqual(["refresh", "copy", "delete"]);
   });
 
   it("maps bottom actions to embed-link- CSS class names", () => {
     expect(CARD_ACTION_ORDER.map((action) => `embed-link-${action}`)).toEqual([
-      "embed-link-delete",
-      "embed-link-copy",
       "embed-link-refresh",
+      "embed-link-copy",
+      "embed-link-delete",
     ]);
   });
 
@@ -90,15 +90,19 @@ describe("card actions", () => {
     expect(processors[0].language).toBe("embed");
   });
 
-  it("renders bottom action buttons in delete, copy, refresh order", () => {
+  it("renders bottom action buttons in refresh, copy, delete order", () => {
     const el = processEmbed(makePlugin(), SAMPLE);
     const bottom = el.querySelector(".embed-link-buttons");
     expect(bottom).not.toBeNull();
     const classes = [...bottom!.children].map((child) =>
       CARD_ACTION_ORDER.find((action) => child.classList.contains(`embed-link-${action}`)),
     );
-    expect(classes).toEqual(["delete", "copy", "refresh"]);
-    expect(el.querySelector(".embed-link-edit")).not.toBeNull();
+    expect(classes).toEqual(["refresh", "copy", "delete"]);
+    expect(el.querySelector(".embed-link-edit")).toBeNull();
+    for (const child of bottom!.children) {
+      expect(child.classList.contains("clickable-icon")).toBe(true);
+      expect(child.tagName).toBe("DIV");
+    }
   });
 
   it("shows favicon when showFavicon is on and a favicon is present", () => {
@@ -123,20 +127,9 @@ describe("card actions", () => {
     expect(plugin.markdownProcessors[0]?.language).toBe("embed");
   });
 
-  it("notices and restores original preview when edit cannot locate the block", async () => {
-    const el = processEmbed(makePlugin(), SAMPLE);
-    (el.querySelector(".embed-link-edit") as HTMLButtonElement).click();
-    const textarea = el.querySelector("textarea") as HTMLTextAreaElement;
-    textarea.value = SAMPLE.replace("Example", "Changed");
-    textarea.dispatchEvent(new Event("blur"));
-    await flush();
-    expect(el.querySelector(".embed-link-thl")?.textContent).toBe("Example");
-    expect(noticeLog()).toContain(t("notice.parseFailed", { detail: "missing block range" }));
-  });
-
   it("notices and skips delete when block range is missing", async () => {
     const el = processEmbed(makePlugin(), SAMPLE);
-    (el.querySelector(".embed-link-delete") as HTMLButtonElement).click();
+    (el.querySelector(".embed-link-delete") as HTMLElement).click();
     (document.querySelector("button.mod-warning") as HTMLButtonElement).click();
     await flush();
     expect(el.querySelector(".embed-link-card")).not.toBeNull();
@@ -147,7 +140,7 @@ describe("card actions", () => {
     const parseSpy = vi.spyOn(parsers, "parseUrl");
     try {
       const el = processEmbed(makePlugin(), SAMPLE);
-      (el.querySelector(".embed-link-refresh") as HTMLButtonElement).click();
+      (el.querySelector(".embed-link-refresh") as HTMLElement).click();
       await flush();
       expect(parseSpy).not.toHaveBeenCalled();
       expect(noticeLog()).toContain(t("notice.parseFailed", { detail: "missing block range" }));

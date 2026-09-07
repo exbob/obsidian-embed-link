@@ -26,6 +26,80 @@ export const URL_MENU_ITEMS: UrlMenuItem[] = [
   { id: "plain-text", key: "urlMenu.plainText" },
 ];
 
+export async function applyUrlMenuChoice(
+  plugin: EmbedLinkPlugin,
+  editor: Editor,
+  url: string,
+  id: UrlMenuId,
+): Promise<void> {
+  if (id === "plain-text") {
+    return;
+  }
+  await replacePastedUrl(plugin, editor, url, id);
+}
+
+export async function insertWebPageCard(plugin: EmbedLinkPlugin, editor: Editor, url: string): Promise<void> {
+  await replacePastedUrl(plugin, editor, url, "web-page-card");
+}
+
+async function replacePastedUrl(
+  plugin: EmbedLinkPlugin,
+  editor: Editor,
+  url: string,
+  id: UrlMenuId,
+): Promise<void> {
+  const { start, end } = pastedUrlRange(editor, url);
+  if (id === "web-page-card") {
+    try {
+      const data = await parseUrl(url, {
+        settings: plugin.settings,
+        vault: plugin.app.vault,
+        app: plugin.app,
+        persistCache: () => plugin.saveSettings(),
+      });
+      editor.replaceRange(serializeEmbedBlock(data), start, end);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      new Notice(t("notice.parseFailed", { detail }));
+      editor.replaceRange(url, start, end);
+    }
+    return;
+  }
+  let title = "";
+  try {
+    const data = await parseUrl(url, {
+      settings: { ...plugin.settings, downloadImages: false },
+      vault: plugin.app.vault,
+      app: plugin.app,
+      persistCache: () => plugin.saveSettings(),
+    });
+    title = data.title;
+  } catch {
+    // fall through to hostname
+  }
+  const display = titleOrHostname(title, url);
+  const text =
+    id === "video-preview" ? formatVideoPreview(display, url) : formatMarkdownLink(display, url);
+  editor.replaceRange(text, start, end);
+}
+
+function pastedUrlRange(
+  editor: Editor,
+  url: string,
+): { start: EditorPosition; end: EditorPosition } {
+  const cursor = editor.getCursor();
+  const line = editor.getLine(cursor.line);
+  const idx = line.indexOf(url);
+  if (idx >= 0) {
+    return {
+      start: { line: cursor.line, ch: idx },
+      end: { line: cursor.line, ch: idx + url.length },
+    };
+  }
+  return { start: cursor, end: cursor };
+}
+
+/** Kept for tests / optional EditorSuggest path; paste UI uses Menu via paste-menu.ts. */
 export class UrlSuggest extends EditorSuggest<UrlMenuItem> {
   private readonly plugin: EmbedLinkPlugin;
   private editor: Editor | null = null;
@@ -49,8 +123,7 @@ export class UrlSuggest extends EditorSuggest<UrlMenuItem> {
   }
 
   insertCard(editor: Editor, url: string): Promise<void> {
-    this.editor = editor;
-    return this.replacePastedUrl(editor, url, "web-page-card");
+    return insertWebPageCard(this.plugin, editor, url);
   }
 
   getSuggestions(): UrlMenuItem[] {
@@ -65,61 +138,9 @@ export class UrlSuggest extends EditorSuggest<UrlMenuItem> {
     const editor = this.editor;
     const url = this.plugin.pasteInfo.text;
     this.close();
-    if (!editor || value.id === "plain-text") {
+    if (!editor) {
       return;
     }
-    void this.replacePastedUrl(editor, url, value.id);
-  }
-
-  private pastedUrlRange(
-    editor: Editor,
-    url: string,
-  ): { start: EditorPosition; end: EditorPosition } {
-    const cursor = editor.getCursor();
-    const line = editor.getLine(cursor.line);
-    const idx = line.indexOf(url);
-    if (idx >= 0) {
-      return {
-        start: { line: cursor.line, ch: idx },
-        end: { line: cursor.line, ch: idx + url.length },
-      };
-    }
-    return { start: cursor, end: cursor };
-  }
-
-  private async replacePastedUrl(editor: Editor, url: string, id: UrlMenuId): Promise<void> {
-    const { start, end } = this.pastedUrlRange(editor, url);
-    if (id === "web-page-card") {
-      try {
-        const data = await parseUrl(url, {
-          settings: this.plugin.settings,
-          vault: this.plugin.app.vault,
-          app: this.plugin.app,
-          persistCache: () => this.plugin.saveSettings(),
-        });
-        editor.replaceRange(serializeEmbedBlock(data), start, end);
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error);
-        new Notice(t("notice.parseFailed", { detail }));
-        editor.replaceRange(url, start, end);
-      }
-      return;
-    }
-    let title = "";
-    try {
-      const data = await parseUrl(url, {
-        settings: { ...this.plugin.settings, downloadImages: false },
-        vault: this.plugin.app.vault,
-        app: this.plugin.app,
-        persistCache: () => this.plugin.saveSettings(),
-      });
-      title = data.title;
-    } catch {
-      // fall through to hostname
-    }
-    const display = titleOrHostname(title, url);
-    const text =
-      id === "video-preview" ? formatVideoPreview(display, url) : formatMarkdownLink(display, url);
-    editor.replaceRange(text, start, end);
+    void applyUrlMenuChoice(this.plugin, editor, url, value.id);
   }
 }

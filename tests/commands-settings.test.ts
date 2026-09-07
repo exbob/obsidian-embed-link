@@ -84,7 +84,7 @@ describe("plugin onload wiring", () => {
       "editor-paste",
       "editor-drop",
     ]);
-    expect(plugin.editorSuggests).toHaveLength(2);
+    expect(plugin.editorSuggests).toHaveLength(0);
     expect(plugin.commands.map((command) => command.id)).toEqual([
       "create-web-page-card",
       "create-web-page-card-local",

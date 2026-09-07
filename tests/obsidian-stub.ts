@@ -336,6 +336,42 @@ export class TFile {
   }
 }
 
+export class Menu {
+  static last: Menu | null = null;
+  items: Array<{ title: string; click: () => void }> = [];
+  position: { x: number; y: number } | null = null;
+
+  constructor() {
+    Menu.last = this;
+  }
+
+  addItem(cb: (item: MenuItemBuilder) => void): this {
+    const entry = { title: "", click: () => {} };
+    const builder: MenuItemBuilder = {
+      setTitle: (title: string) => {
+        entry.title = title;
+        return builder;
+      },
+      onClick: (fn: () => void) => {
+        entry.click = fn;
+        return builder;
+      },
+    };
+    cb(builder);
+    this.items.push(entry);
+    return this;
+  }
+
+  showAtPosition(pos: { x: number; y: number }): void {
+    this.position = pos;
+  }
+}
+
+interface MenuItemBuilder {
+  setTitle: (title: string) => MenuItemBuilder;
+  onClick: (fn: () => void) => MenuItemBuilder;
+}
+
 export const Platform = {
   isMobile: false,
 };

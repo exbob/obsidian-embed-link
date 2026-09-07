@@ -5,27 +5,23 @@ import { formatFilenameWikiLink } from "../files/wiki-link";
 import { t } from "../i18n";
 import { classifyClipboardText, classifyDroppedOrPastedFile } from "./classify";
 import { decideUrlPaste } from "./decide";
-import { FileSuggest, createDefaultAttachmentLink } from "../ui/file-suggest";
-import { UrlSuggest } from "../ui/url-suggest";
+import { createDefaultAttachmentLink } from "../ui/file-suggest";
+import { insertWebPageCard } from "../ui/url-suggest";
+import { showFilePasteMenu, showUrlPasteMenu } from "../ui/paste-menu";
 
 export { createDefaultAttachmentLink };
 
 export function registerPasteDropRouter(plugin: EmbedLinkPlugin): void {
-  const urlSuggest = new UrlSuggest(plugin.app, plugin);
-  const fileSuggest = new FileSuggest(plugin.app, plugin);
-  plugin.registerEditorSuggest(urlSuggest);
-  plugin.registerEditorSuggest(fileSuggest);
-
   plugin.registerEvent(
     plugin.app.workspace.on("editor-paste", (evt: ClipboardEvent, editor: Editor) => {
-      void handleEditorEvent(plugin, evt, editor, urlSuggest, fileSuggest);
+      void handleEditorEvent(plugin, evt, editor);
     }),
   );
 
   if (!Platform.isMobile) {
     plugin.registerEvent(
       plugin.app.workspace.on("editor-drop", (evt: DragEvent, editor: Editor) => {
-        void handleEditorEvent(plugin, evt, editor, urlSuggest, fileSuggest);
+        void handleEditorEvent(plugin, evt, editor);
       }),
     );
   }
@@ -35,8 +31,6 @@ async function handleEditorEvent(
   plugin: EmbedLinkPlugin,
   evt: ClipboardEvent | DragEvent,
   editor: Editor,
-  urlSuggest: UrlSuggest,
-  fileSuggest: FileSuggest,
 ): Promise<void> {
   if (evt.defaultPrevented) {
     return;
@@ -51,7 +45,7 @@ async function handleEditorEvent(
     return;
   }
   if (files.length === 1) {
-    await handleFile(plugin, evt, editor, files[0], fileSuggest);
+    await handleFile(plugin, evt, editor, files[0]);
     return;
   }
 
@@ -70,12 +64,14 @@ async function handleEditorEvent(
   }
   evt.preventDefault();
   if (action.type === "auto-card") {
-    await urlSuggest.insertCard(editor, classified.url);
+    await insertWebPageCard(plugin, editor, classified.url);
     return;
   }
-  plugin.pasteInfo.trigger = true;
-  plugin.pasteInfo.text = classified.url;
+  // Insert trimmed URL then show Obsidian Menu (EditorSuggest.open is unreliable after preventDefault).
   editor.replaceSelection(classified.url);
+  plugin.pasteInfo.trigger = false;
+  plugin.pasteInfo.text = classified.url;
+  showUrlPasteMenu(plugin, editor, classified.url);
 }
 
 async function handleFile(
@@ -83,7 +79,6 @@ async function handleFile(
   evt: ClipboardEvent | DragEvent,
   editor: Editor,
   file: File,
-  fileSuggest: FileSuggest,
 ): Promise<void> {
   if (classifyDroppedOrPastedFile(file) !== "non-media-file") {
     return;
@@ -99,8 +94,7 @@ async function handleFile(
     }
     return;
   }
-  fileSuggest.arm(editor, file);
-  fileSuggest.open();
+  showFilePasteMenu(plugin, editor, file);
 }
 
 function transferData(evt: ClipboardEvent | DragEvent): DataTransfer | null {

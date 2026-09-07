@@ -61,13 +61,7 @@ function buildCard(
   const card = document.createElement("div");
   card.className = "embed-link-card";
 
-  const edit = createActionButton("embed-link-edit", "pencil", t("card.edit"));
-  edit.addEventListener("click", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    enterEditMode(plugin, source, el, ctx);
-  });
-  card.appendChild(edit);
+  // Edit uses Obsidian's native "Edit this block" on the code block — do not add a duplicate.
 
   const bottom = document.createElement("div");
   bottom.className = "embed-link-buttons";
@@ -178,10 +172,12 @@ function buildCard(
   return card;
 }
 
-function createActionButton(className: string, icon: string, label: string): HTMLButtonElement {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = className;
+function createActionButton(className: string, icon: string, label: string): HTMLElement {
+  // Match Obsidian `.edit-block-button` / `.clickable-icon`: no border, hover darkens background.
+  const button = document.createElement("div");
+  button.className = `clickable-icon ${className}`;
+  button.setAttribute("role", "button");
+  button.tabIndex = 0;
   button.title = label;
   button.setAttribute("aria-label", label);
   setIcon(button, icon);
@@ -204,64 +200,6 @@ function resolveImageSrc(plugin: EmbedLinkPlugin, image: string): string {
     return plugin.app.vault.getResourcePath(file);
   }
   return image;
-}
-
-function enterEditMode(
-  plugin: EmbedLinkPlugin,
-  source: string,
-  el: HTMLElement,
-  ctx: MarkdownPostProcessorContext,
-): void {
-  el.replaceChildren();
-  const textarea = document.createElement("textarea");
-  textarea.className = "embed-link-editor";
-  textarea.value = source;
-  el.appendChild(textarea);
-  textarea.focus();
-
-  let committed = false;
-  const commit = () => {
-    if (committed) {
-      return;
-    }
-    committed = true;
-    void writeEditedSource(plugin, textarea.value, source, el, ctx);
-  };
-
-  textarea.addEventListener("blur", commit);
-  textarea.addEventListener("keydown", (event) => {
-    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-      event.preventDefault();
-      textarea.blur();
-    }
-  });
-}
-
-async function writeEditedSource(
-  plugin: EmbedLinkPlugin,
-  edited: string,
-  original: string,
-  el: HTMLElement,
-  ctx: MarkdownPostProcessorContext,
-): Promise<void> {
-  const range = resolveBlockRange(plugin, el, ctx);
-  if (!range) {
-    notifyMissingBlockRange();
-    renderEmbed(plugin, original, el, ctx);
-    return;
-  }
-  try {
-    const content = await plugin.app.vault.read(range.file);
-    const next = replaceEmbedBlockInMarkdown(
-      content,
-      range.lineStart,
-      range.lineEnd,
-      wrapFencedEmbed(edited),
-    );
-    await plugin.app.vault.modify(range.file, next);
-  } catch {
-    renderEmbed(plugin, original, el, ctx);
-  }
 }
 
 async function handleAction(

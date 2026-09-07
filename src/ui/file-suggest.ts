@@ -31,6 +31,27 @@ export async function createDefaultAttachmentLink(app: App, file: File): Promise
   return app.fileManager.generateMarkdownLink(created, sourcePath);
 }
 
+export async function applyFileMenuChoice(
+  plugin: EmbedLinkPlugin,
+  editor: Editor,
+  file: File,
+  id: FileMenuId,
+): Promise<void> {
+  try {
+    if (id === "filename-link") {
+      const copied = await copyFileIntoAttachments(plugin.app, file);
+      editor.replaceSelection(formatFilenameWikiLink(copied.path, copied.fileName));
+      return;
+    }
+    const link = await createDefaultAttachmentLink(plugin.app, file);
+    editor.replaceSelection(link);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    new Notice(t("notice.parseFailed", { detail }));
+  }
+}
+
+/** Kept for tests; paste UI uses Menu via paste-menu.ts. */
 export class FileSuggest extends EditorSuggest<FileMenuItem> {
   private readonly plugin: EmbedLinkPlugin;
   private editor: Editor | null = null;
@@ -78,21 +99,6 @@ export class FileSuggest extends EditorSuggest<FileMenuItem> {
     if (!editor || !file) {
       return;
     }
-    void this.applyChoice(editor, file, value.id);
-  }
-
-  private async applyChoice(editor: Editor, file: File, id: FileMenuId): Promise<void> {
-    try {
-      if (id === "filename-link") {
-        const copied = await copyFileIntoAttachments(this.plugin.app, file);
-        editor.replaceSelection(formatFilenameWikiLink(copied.path, copied.fileName));
-        return;
-      }
-      const link = await createDefaultAttachmentLink(this.plugin.app, file);
-      editor.replaceSelection(link);
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      new Notice(t("notice.parseFailed", { detail }));
-    }
+    void applyFileMenuChoice(this.plugin, editor, file, value.id);
   }
 }

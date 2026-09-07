@@ -1,5 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { App, Notice, Platform, type PluginManifest } from "obsidian";
+import { App, Menu, Notice, Platform, type PluginManifest } from "obsidian";
+
+type MenuCtor = typeof Menu & {
+  last: {
+    items: Array<{ title: string; click: () => void }>;
+    position: { x: number; y: number } | null;
+  } | null;
+};
+
+function menuLast() {
+  return (Menu as MenuCtor).last;
+}
 import EmbedLinkPlugin from "../src/main";
 import { DEFAULT_SETTINGS } from "../src/settings";
 import { registerPasteDropRouter, createDefaultAttachmentLink } from "../src/paste/router";
@@ -140,7 +151,6 @@ describe("registerPasteDropRouter", () => {
       "editor-paste",
       "editor-drop",
     ]);
-    expect(plugin.editorSuggests).toHaveLength(2);
   });
 
   it("registers paste only on mobile", () => {
@@ -156,11 +166,11 @@ describe("registerPasteDropRouter", () => {
     const editor = makeEditor("hello", 5);
     const evt = clipboardEvent("https://example.com");
     (plugin.app as WorkspaceApp).workspace.trigger("editor-paste", evt, editor);
-    expect(plugin.pasteInfo.trigger).toBe(false);
     expect(evt.preventDefault).not.toHaveBeenCalled();
   });
 
-  it("inserts the trimmed URL so pasteInfo.text matches the editor", () => {
+  it("inserts the trimmed URL and shows a Menu when autoEmbed is off", () => {
+    (Menu as MenuCtor).last = null;
     const plugin = makePlugin();
     plugin.settings.autoEmbed = false;
     registerPasteDropRouter(plugin);
@@ -168,8 +178,15 @@ describe("registerPasteDropRouter", () => {
     const evt = clipboardEvent("https://example.com/a\n\n");
     (plugin.app as WorkspaceApp).workspace.trigger("editor-paste", evt, editor);
     expect(evt.preventDefault).toHaveBeenCalled();
-    expect(plugin.pasteInfo).toEqual({ trigger: true, text: "https://example.com/a" });
     expect(editor.replaceSelection).toHaveBeenCalledWith("https://example.com/a");
+    const shown = menuLast();
+    expect(shown).not.toBeNull();
+    expect(shown!.items.map((item) => item.title)).toEqual([
+      t("urlMenu.webPageCard"),
+      t("urlMenu.videoPreview"),
+      t("urlMenu.markdownLink"),
+      t("urlMenu.plainText"),
+    ]);
   });
 
   it("autoEmbed URL paste inserts an embed block", async () => {
@@ -233,17 +250,9 @@ describe("registerPasteDropRouter", () => {
         parseSpy.mockClear();
         const plugin = makePlugin();
         plugin.settings.downloadImages = true;
-        plugin.pasteInfo = { trigger: true, text: "https://example.com" };
-        const suggest = new UrlSuggest(plugin.app, plugin);
+        const { applyUrlMenuChoice } = await import("../src/ui/url-suggest");
         const editor = makeEditor("https://example.com", "https://example.com".length);
-        const trigger = suggest.onTrigger(editor.getCursor(), editor as never, null);
-        expect(trigger).not.toBeNull();
-        const item = suggest.getSuggestions().find((choice) => choice.id === id);
-        expect(item).toBeDefined();
-        suggest.selectSuggestion(item!);
-        await vi.waitFor(() => {
-          expect(editor.replaceRange).toHaveBeenCalled();
-        });
+        await applyUrlMenuChoice(plugin, editor as never, "https://example.com", id);
         expect(parseSpy).toHaveBeenCalled();
         expect(parseSpy.mock.calls[0][1].settings.downloadImages).toBe(false);
         expect(plugin.settings.downloadImages).toBe(true);
@@ -255,17 +264,10 @@ describe("registerPasteDropRouter", () => {
 
   it("replaces a pasted URL by searching the current line", async () => {
     const plugin = makePlugin();
-    plugin.pasteInfo = { trigger: true, text: "https://example.com" };
-    const suggest = new UrlSuggest(plugin.app, plugin);
+    const { applyUrlMenuChoice } = await import("../src/ui/url-suggest");
     const editor = makeEditor("https://example.com extra", 25);
-    const trigger = suggest.onTrigger(editor.getCursor(), editor as never, null);
-    expect(trigger).not.toBeNull();
-    const markdown = suggest.getSuggestions().find((item) => item.id === "markdown-link");
-    expect(markdown).toBeDefined();
-    suggest.selectSuggestion(markdown!);
-    await vi.waitFor(() => {
-      expect(editor.replaceRange).toHaveBeenCalled();
-    });
+    await applyUrlMenuChoice(plugin, editor as never, "https://example.com", "markdown-link");
+    expect(editor.replaceRange).toHaveBeenCalled();
     const [, start, end] = editor.replaceRange.mock.calls[0];
     expect(start).toEqual({ line: 0, ch: 0 });
     expect(end).toEqual({ line: 0, ch: "https://example.com".length });
@@ -296,18 +298,22 @@ describe("registerPasteDropRouter", () => {
     });
   });
 
-  it("opens FileSuggest for a non-media file when autoEmbed is off", () => {
+  it("shows a file Menu for a non-media file when autoEmbed is off", () => {
+    (Menu as MenuCtor).last = null;
     const plugin = makePlugin();
     plugin.settings.autoEmbed = false;
     registerPasteDropRouter(plugin);
-    const fileSuggest = plugin.editorSuggests.find((s) => s instanceof FileSuggest) as FileSuggest;
-    const openSpy = vi.spyOn(fileSuggest, "open");
     const editor = makeEditor("", 0);
     const file = new File([new Uint8Array([1])], "doc.pdf", { type: "application/pdf" });
     const evt = clipboardEvent("", [file]);
     (plugin.app as WorkspaceApp).workspace.trigger("editor-paste", evt, editor);
     expect(evt.preventDefault).toHaveBeenCalled();
-    expect(openSpy).toHaveBeenCalled();
+    const shown = menuLast();
+    expect(shown).not.toBeNull();
+    expect(shown!.items.map((item) => item.title)).toEqual([
+      t("fileMenu.filenameLink"),
+      t("fileMenu.defaultLink"),
+    ]);
   });
 
   it("shows a Notice after preventDefault when file copy fails", async () => {

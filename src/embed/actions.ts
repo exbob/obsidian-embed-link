@@ -1,7 +1,7 @@
 import { Modal, type App } from "obsidian";
 import { t } from "../i18n";
 
-export const CARD_ACTION_ORDER = ["delete", "copy", "refresh"] as const;
+export const CARD_ACTION_ORDER = ["refresh", "copy", "delete"] as const;
 
 export type CardAction = (typeof CARD_ACTION_ORDER)[number];
 

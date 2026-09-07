@@ -76,10 +76,10 @@ Hover a web page card:
 
 | Position | Control | Behavior |
 | -------- | ------- | -------- |
-| Top-right | **Edit** | Switch that `embed` block to editable source; leave the editor to restore the preview |
-| Bottom-right (left → right) | **Delete** | Confirm, then remove the block |
+| Top-right | **Edit this block** (Obsidian built-in) | Edit the `embed` code block source |
+| Bottom-right (top → bottom) | **Refresh** | Re-parse the URL and update the block |
 | | **Copy** | Copy the embed source to the clipboard |
-| | **Refresh** | Re-parse the URL and update the block |
+| | **Delete** | Confirm, then remove the block |
 
 ## Settings
 
