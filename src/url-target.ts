@@ -28,14 +28,17 @@ export function urlTokenRangeAtCursor(
   ch: number,
 ): { url: string; from: number; to: number } | null {
   const clamped = Math.max(0, Math.min(ch, line.length));
-  const before = line.slice(0, clamped);
-  const start = before.search(/\S+$/);
-  if (start === -1) {
+  let start = clamped;
+  while (start > 0 && /\S/.test(line[start - 1])) {
+    start--;
+  }
+  let end = clamped;
+  while (end < line.length && /\S/.test(line[end])) {
+    end++;
+  }
+  if (start === end) {
     return null;
   }
-  const after = line.slice(clamped);
-  const rest = after.match(/^\S*/);
-  const end = clamped + (rest ? rest[0].length : 0);
   const token = line.slice(start, end);
   const classified = classifyClipboardText(token);
   return classified.kind === "url" ? { url: classified.url, from: start, to: end } : null;

@@ -49,6 +49,20 @@ describe("urlTokenAtCursor", () => {
     expect(urlTokenAtCursor(line, "see https://b.com".length)).toBe("https://b.com");
   });
 
+  it("returns the URL when the cursor is at ch===0", () => {
+    expect(urlTokenAtCursor("https://b.com please", 0)).toBe("https://b.com");
+  });
+
+  it("returns the URL when the cursor is at the token start", () => {
+    const line = "see https://b.com please";
+    expect(urlTokenAtCursor(line, "see ".length)).toBe("https://b.com");
+  });
+
+  it("returns the URL when the cursor is in the token middle", () => {
+    const line = "see https://b.com please";
+    expect(urlTokenAtCursor(line, "see https".length)).toBe("https://b.com");
+  });
+
   it("returns null when the cursor is not on a URL", () => {
     expect(urlTokenAtCursor("see https://b.com please", 2)).toBeNull();
   });
