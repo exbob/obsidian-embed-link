@@ -1,12 +1,20 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { App, Platform, type PluginManifest } from "obsidian";
+import { App, Notice, Platform, type PluginManifest } from "obsidian";
 import EmbedLinkPlugin from "../src/main";
 import { DEFAULT_SETTINGS } from "../src/settings";
 import { registerPasteDropRouter, createDefaultAttachmentLink } from "../src/paste/router";
 import { URL_MENU_ITEMS, UrlSuggest } from "../src/ui/url-suggest";
 import { FILE_MENU_ITEMS, FileSuggest } from "../src/ui/file-suggest";
+import * as parsers from "../src/parsers";
+import { serializeEmbedBlock } from "../src/embed/serialize";
 import { t } from "../src/i18n";
 import type { TFile } from "obsidian";
+
+type NoticeWithLog = typeof Notice & { messages: string[] };
+
+function noticeLog(): string[] {
+  return (Notice as NoticeWithLog).messages;
+}
 
 const MANIFEST: PluginManifest = {
   id: "embed-link",
@@ -114,8 +122,14 @@ describe("URL and file suggest menus", () => {
 });
 
 describe("registerPasteDropRouter", () => {
+  beforeEach(() => {
+    noticeLog().length = 0;
+    Platform.isMobile = false;
+  });
+
   afterEach(() => {
     Platform.isMobile = false;
+    vi.restoreAllMocks();
   });
 
   it("registers paste and drop on desktop", () => {
@@ -146,34 +160,141 @@ describe("registerPasteDropRouter", () => {
     expect(evt.preventDefault).not.toHaveBeenCalled();
   });
 
-  it("sets pasteInfo.trigger for an empty-line URL when autoEmbed is off", () => {
+  it("inserts the trimmed URL so pasteInfo.text matches the editor", () => {
     const plugin = makePlugin();
     plugin.settings.autoEmbed = false;
     registerPasteDropRouter(plugin);
     const editor = makeEditor("", 0);
-    const evt = clipboardEvent("https://example.com/a");
+    const evt = clipboardEvent("https://example.com/a\n\n");
     (plugin.app as WorkspaceApp).workspace.trigger("editor-paste", evt, editor);
+    expect(evt.preventDefault).toHaveBeenCalled();
     expect(plugin.pasteInfo).toEqual({ trigger: true, text: "https://example.com/a" });
-    expect(evt.preventDefault).not.toHaveBeenCalled();
+    expect(editor.replaceSelection).toHaveBeenCalledWith("https://example.com/a");
   });
 
-  it("opens URL suggest via pasteInfo onTrigger and skips the menu for autoEmbed", () => {
+  it("autoEmbed URL paste inserts an embed block", async () => {
+    const card = {
+      title: "Example",
+      image: "https://example.com/img.png",
+      description: "Hello",
+      url: "https://example.com",
+    };
+    const parseSpy = vi.spyOn(parsers, "parseUrl").mockResolvedValue(card);
+    try {
+      const plugin = makePlugin();
+      plugin.settings.autoEmbed = true;
+      registerPasteDropRouter(plugin);
+      const editor = makeEditor("", 0);
+      const evt = clipboardEvent("https://example.com");
+      (plugin.app as WorkspaceApp).workspace.trigger("editor-paste", evt, editor);
+      expect(evt.preventDefault).toHaveBeenCalled();
+      await vi.waitFor(() => {
+        expect(editor.replaceRange).toHaveBeenCalled();
+      });
+      expect(editor.replaceRange.mock.calls[0][0]).toBe(serializeEmbedBlock(card));
+      expect(plugin.pasteInfo.trigger).toBe(false);
+      expect(parseSpy).toHaveBeenCalled();
+    } finally {
+      parseSpy.mockRestore();
+    }
+  });
+
+  it("replaces a pasted URL by searching the current line", async () => {
+    const plugin = makePlugin();
+    plugin.pasteInfo = { trigger: true, text: "https://example.com" };
+    const suggest = new UrlSuggest(plugin.app, plugin);
+    const editor = makeEditor("https://example.com extra", 25);
+    const trigger = suggest.onTrigger(editor.getCursor(), editor as never, null);
+    expect(trigger).not.toBeNull();
+    const markdown = suggest.getSuggestions().find((item) => item.id === "markdown-link");
+    expect(markdown).toBeDefined();
+    suggest.selectSuggestion(markdown!);
+    await vi.waitFor(() => {
+      expect(editor.replaceRange).toHaveBeenCalled();
+    });
+    const [, start, end] = editor.replaceRange.mock.calls[0];
+    expect(start).toEqual({ line: 0, ch: 0 });
+    expect(end).toEqual({ line: 0, ch: "https://example.com".length });
+  });
+
+  it("does not intercept a media file paste", () => {
+    const plugin = makePlugin();
+    registerPasteDropRouter(plugin);
+    const editor = makeEditor("", 0);
+    const file = new File([new Uint8Array([1])], "pic.png", { type: "image/png" });
+    const evt = clipboardEvent("", [file]);
+    (plugin.app as WorkspaceApp).workspace.trigger("editor-paste", evt, editor);
+    expect(evt.preventDefault).not.toHaveBeenCalled();
+    expect(editor.replaceSelection).not.toHaveBeenCalled();
+  });
+
+  it("autoEmbed non-media file paste inserts a filename wiki link", async () => {
     const plugin = makePlugin();
     plugin.settings.autoEmbed = true;
     registerPasteDropRouter(plugin);
     const editor = makeEditor("", 0);
-    (plugin.app as WorkspaceApp).workspace.trigger(
-      "editor-paste",
-      clipboardEvent("https://example.com"),
-      editor,
-    );
-    expect(plugin.pasteInfo.trigger).toBe(true);
-    editor.setLine("https://example.com");
-    editor.setCursor({ line: 0, ch: "https://example.com".length });
-    const urlSuggest = plugin.editorSuggests.find((s) => s instanceof UrlSuggest) as UrlSuggest;
-    const trigger = urlSuggest.onTrigger(editor.getCursor(), editor as never, null);
-    expect(trigger).toBeNull();
-    expect(plugin.pasteInfo.trigger).toBe(false);
+    const file = new File([new Uint8Array([1])], "doc.pdf", { type: "application/pdf" });
+    const evt = clipboardEvent("", [file]);
+    (plugin.app as WorkspaceApp).workspace.trigger("editor-paste", evt, editor);
+    expect(evt.preventDefault).toHaveBeenCalled();
+    await vi.waitFor(() => {
+      expect(editor.replaceSelection).toHaveBeenCalledWith("[[doc.pdf|doc.pdf]]");
+    });
+  });
+
+  it("opens FileSuggest for a non-media file when autoEmbed is off", () => {
+    const plugin = makePlugin();
+    plugin.settings.autoEmbed = false;
+    registerPasteDropRouter(plugin);
+    const fileSuggest = plugin.editorSuggests.find((s) => s instanceof FileSuggest) as FileSuggest;
+    const openSpy = vi.spyOn(fileSuggest, "open");
+    const editor = makeEditor("", 0);
+    const file = new File([new Uint8Array([1])], "doc.pdf", { type: "application/pdf" });
+    const evt = clipboardEvent("", [file]);
+    (plugin.app as WorkspaceApp).workspace.trigger("editor-paste", evt, editor);
+    expect(evt.preventDefault).toHaveBeenCalled();
+    expect(openSpy).toHaveBeenCalled();
+  });
+
+  it("shows a Notice after preventDefault when file copy fails", async () => {
+    const plugin = makePlugin();
+    plugin.settings.autoEmbed = true;
+    vi.spyOn(plugin.app.vault, "createBinary").mockRejectedValue(new Error("disk full"));
+    registerPasteDropRouter(plugin);
+    const editor = makeEditor("", 0);
+    const file = new File([new Uint8Array([1])], "doc.pdf", { type: "application/pdf" });
+    const evt = clipboardEvent("", [file]);
+    (plugin.app as WorkspaceApp).workspace.trigger("editor-paste", evt, editor);
+    expect(evt.preventDefault).toHaveBeenCalled();
+    await vi.waitFor(() => {
+      expect(noticeLog()).toContain(t("notice.parseFailed", { detail: "disk full" }));
+    });
+    expect(editor.replaceSelection).not.toHaveBeenCalled();
+  });
+});
+
+describe("FileSuggest copy errors", () => {
+  beforeEach(() => {
+    noticeLog().length = 0;
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("shows a Notice when filename-link copy fails", async () => {
+    const plugin = makePlugin();
+    vi.spyOn(plugin.app.vault, "createBinary").mockRejectedValue(new Error("disk full"));
+    const suggest = new FileSuggest(plugin.app, plugin);
+    const editor = makeEditor("", 0);
+    suggest.arm(editor as never, new File([new Uint8Array([1])], "doc.pdf"));
+    const filename = suggest.getSuggestions().find((item) => item.id === "filename-link");
+    expect(filename).toBeDefined();
+    suggest.selectSuggestion(filename!);
+    await vi.waitFor(() => {
+      expect(noticeLog()).toContain(t("notice.parseFailed", { detail: "disk full" }));
+    });
+    expect(editor.replaceSelection).not.toHaveBeenCalled();
   });
 });
 

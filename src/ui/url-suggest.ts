@@ -45,12 +45,12 @@ export class UrlSuggest extends EditorSuggest<UrlMenuItem> {
     }
     this.plugin.pasteInfo.trigger = false;
     this.editor = editor;
-    const url = this.plugin.pasteInfo.text;
-    if (this.plugin.settings.autoEmbed) {
-      void this.replacePastedUrl(editor, url, "web-page-card");
-      return null;
-    }
-    return { start: cursor, end: cursor, query: url };
+    return { start: cursor, end: cursor, query: this.plugin.pasteInfo.text };
+  }
+
+  insertCard(editor: Editor, url: string): Promise<void> {
+    this.editor = editor;
+    return this.replacePastedUrl(editor, url, "web-page-card");
   }
 
   getSuggestions(): UrlMenuItem[] {
@@ -71,10 +71,24 @@ export class UrlSuggest extends EditorSuggest<UrlMenuItem> {
     void this.replacePastedUrl(editor, url, value.id);
   }
 
-  private async replacePastedUrl(editor: Editor, url: string, id: UrlMenuId): Promise<void> {
+  private pastedUrlRange(
+    editor: Editor,
+    url: string,
+  ): { start: EditorPosition; end: EditorPosition } {
     const cursor = editor.getCursor();
-    const start = { line: cursor.line, ch: Math.max(0, cursor.ch - url.length) };
-    const end = cursor;
+    const line = editor.getLine(cursor.line);
+    const idx = line.indexOf(url);
+    if (idx >= 0) {
+      return {
+        start: { line: cursor.line, ch: idx },
+        end: { line: cursor.line, ch: idx + url.length },
+      };
+    }
+    return { start: cursor, end: cursor };
+  }
+
+  private async replacePastedUrl(editor: Editor, url: string, id: UrlMenuId): Promise<void> {
+    const { start, end } = this.pastedUrlRange(editor, url);
     if (id === "web-page-card") {
       try {
         const data = await parseUrl(url, {

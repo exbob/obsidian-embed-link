@@ -1,5 +1,6 @@
 import {
   EditorSuggest,
+  Notice,
   type App,
   type Editor,
   type EditorPosition,
@@ -81,12 +82,17 @@ export class FileSuggest extends EditorSuggest<FileMenuItem> {
   }
 
   private async applyChoice(editor: Editor, file: File, id: FileMenuId): Promise<void> {
-    if (id === "filename-link") {
-      const copied = await copyFileIntoAttachments(this.plugin.app, file);
-      editor.replaceSelection(formatFilenameWikiLink(copied.path, copied.fileName));
-      return;
+    try {
+      if (id === "filename-link") {
+        const copied = await copyFileIntoAttachments(this.plugin.app, file);
+        editor.replaceSelection(formatFilenameWikiLink(copied.path, copied.fileName));
+        return;
+      }
+      const link = await createDefaultAttachmentLink(this.plugin.app, file);
+      editor.replaceSelection(link);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      new Notice(t("notice.parseFailed", { detail }));
     }
-    const link = await createDefaultAttachmentLink(this.plugin.app, file);
-    editor.replaceSelection(link);
   }
 }

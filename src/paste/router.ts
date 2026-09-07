@@ -1,7 +1,8 @@
-import { Platform, type Editor } from "obsidian";
+import { Notice, Platform, type Editor } from "obsidian";
 import type EmbedLinkPlugin from "../main";
 import { copyFileIntoAttachments } from "../files/copy";
 import { formatFilenameWikiLink } from "../files/wiki-link";
+import { t } from "../i18n";
 import { classifyClipboardText, classifyDroppedOrPastedFile } from "./classify";
 import { decideUrlPaste } from "./decide";
 import { FileSuggest, createDefaultAttachmentLink } from "../ui/file-suggest";
@@ -17,14 +18,14 @@ export function registerPasteDropRouter(plugin: EmbedLinkPlugin): void {
 
   plugin.registerEvent(
     plugin.app.workspace.on("editor-paste", (evt: ClipboardEvent, editor: Editor) => {
-      void handleEditorEvent(plugin, evt, editor, fileSuggest);
+      void handleEditorEvent(plugin, evt, editor, urlSuggest, fileSuggest);
     }),
   );
 
   if (!Platform.isMobile) {
     plugin.registerEvent(
       plugin.app.workspace.on("editor-drop", (evt: DragEvent, editor: Editor) => {
-        void handleEditorEvent(plugin, evt, editor, fileSuggest);
+        void handleEditorEvent(plugin, evt, editor, urlSuggest, fileSuggest);
       }),
     );
   }
@@ -34,6 +35,7 @@ async function handleEditorEvent(
   plugin: EmbedLinkPlugin,
   evt: ClipboardEvent | DragEvent,
   editor: Editor,
+  urlSuggest: UrlSuggest,
   fileSuggest: FileSuggest,
 ): Promise<void> {
   if (evt.defaultPrevented) {
@@ -66,8 +68,14 @@ async function handleEditorEvent(
   if (action.type === "ignore") {
     return;
   }
+  evt.preventDefault();
+  if (action.type === "auto-card") {
+    await urlSuggest.insertCard(editor, classified.url);
+    return;
+  }
   plugin.pasteInfo.trigger = true;
   plugin.pasteInfo.text = classified.url;
+  editor.replaceSelection(classified.url);
 }
 
 async function handleFile(
@@ -82,8 +90,13 @@ async function handleFile(
   }
   evt.preventDefault();
   if (plugin.settings.autoEmbed) {
-    const copied = await copyFileIntoAttachments(plugin.app, file);
-    editor.replaceSelection(formatFilenameWikiLink(copied.path, copied.fileName));
+    try {
+      const copied = await copyFileIntoAttachments(plugin.app, file);
+      editor.replaceSelection(formatFilenameWikiLink(copied.path, copied.fileName));
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      new Notice(t("notice.parseFailed", { detail }));
+    }
     return;
   }
   fileSuggest.arm(editor, file);
