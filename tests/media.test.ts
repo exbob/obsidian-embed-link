@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import type { App, Vault } from "obsidian";
 import { DEFAULT_SETTINGS } from "../src/settings";
-import { downloadImageToVault, resolveImageFolderPath, uniqueFilePath } from "../src/media/download";
+import { downloadImageToVault, pathRelativeToNote, resolveImageFolderPath, uniqueFilePath } from "../src/media/download";
 import { getAspectRatio } from "../src/media/aspect-ratio";
 import { applyMediaSideEffects } from "../src/parsers/base";
 import type { ParseOptions } from "../src/parsers/types";
@@ -94,6 +94,18 @@ describe("uniqueFilePath", () => {
   });
 });
 
+describe("pathRelativeToNote", () => {
+  it("strips the note folder prefix like Obsidian wiki links", () => {
+    expect(pathRelativeToNote("Test/attachments/a.jpg", "Test/index.md")).toBe(
+      "attachments/a.jpg",
+    );
+  });
+
+  it("keeps vault paths that are outside the note folder", () => {
+    expect(pathRelativeToNote("Attachments/a.jpg", "Test/index.md")).toBe("Attachments/a.jpg");
+  });
+});
+
 describe("resolveImageFolderPath", () => {
   it("uses the plugin setting when set", () => {
     const settings = { ...DEFAULT_SETTINGS, imageFolderPath: "embeds/" };
@@ -108,6 +120,20 @@ describe("resolveImageFolderPath", () => {
       },
     } as unknown as App;
     expect(resolveImageFolderPath(settings, app)).toBe("Attachments");
+  });
+
+  it("resolves ./attachments under the active note folder", () => {
+    const settings = { ...DEFAULT_SETTINGS, imageFolderPath: "" };
+    const app = {
+      vault: {
+        getConfig: (key: string) =>
+          key === "attachmentFolderPath" ? "./attachments" : undefined,
+      },
+      workspace: {
+        getActiveFile: () => ({ path: "Test/index.md", parent: { path: "Test" } }),
+      },
+    } as unknown as App;
+    expect(resolveImageFolderPath(settings, app)).toBe("Test/attachments");
   });
 });
 
@@ -244,6 +270,52 @@ describe("applyMediaSideEffects", () => {
     );
     expect(result.image).toBe("embeds/cover.png");
     expect(result.aspectRatio).toBeUndefined();
+  });
+
+  it("writes note-relative image paths into embed data", async () => {
+    const vault = new MemoryVault();
+    const requestUrl = vi.fn(async () => ({
+      json: {},
+      text: "",
+      arrayBuffer: pngBuffer(4, 2),
+    }));
+    const vaultWithConfig = Object.assign(vault, {
+      getConfig: (key: string) => (key === "attachmentFolderPath" ? "./attachments" : undefined),
+    });
+    const app = {
+      vault: vaultWithConfig,
+      workspace: {
+        getActiveFile: () => ({ path: "Test/index.md", parent: { path: "Test" } }),
+      },
+      metadataCache: {
+        fileToLinktext: (file: { path: string }, sourcePath: string) =>
+          pathRelativeToNote(file.path, sourcePath),
+      },
+    };
+    const result = await applyMediaSideEffects(
+      {
+        title: "T",
+        image: "https://cdn.example/cover.png",
+        description: "",
+        url: "https://example.com",
+      },
+      {
+        settings: {
+          ...DEFAULT_SETTINGS,
+          downloadImages: true,
+          keepAspectRatio: false,
+          imageFolderPath: "",
+          cache: {},
+        },
+        vault: vaultWithConfig as unknown as Vault,
+        app: app as unknown as App,
+        sourcePath: "Test/index.md",
+        requestUrl: requestUrl as never,
+      },
+    );
+    // Folder resolves to Test/attachments; embed source should match Obsidian paste-image.
+    expect(vault.files.has("Test/attachments/cover.png")).toBe(true);
+    expect(result.image).toBe("attachments/cover.png");
   });
 
   it("sets aspectRatio when keepAspectRatio is on", async () => {

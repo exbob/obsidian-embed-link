@@ -109,7 +109,7 @@ function buildCard(
 
   const cover = document.createElement("div");
   cover.className = "embed-link-c";
-  const imageSrc = resolveImageSrc(plugin, data.image);
+  const imageSrc = resolveImageSrc(plugin, data.image, ctx.sourcePath);
   if (imageSrc) {
     cover.style.backgroundImage = `url("${cssUrl(imageSrc)}")`;
   }
@@ -188,18 +188,38 @@ function cssUrl(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
-function resolveImageSrc(plugin: EmbedLinkPlugin, image: string): string {
+function resolveImageSrc(plugin: EmbedLinkPlugin, image: string, sourcePath: string): string {
   if (!image) {
     return "";
   }
   if (/^(https?:|data:|app:)/i.test(image)) {
     return image;
   }
-  const file = plugin.app.vault.getAbstractFileByPath(image);
-  if (file instanceof TFile) {
+  const file = resolveVaultImage(plugin, image, sourcePath);
+  if (file) {
     return plugin.app.vault.getResourcePath(file);
   }
   return image;
+}
+
+function resolveVaultImage(
+  plugin: EmbedLinkPlugin,
+  image: string,
+  sourcePath: string,
+): TFile | null {
+  const direct = plugin.app.vault.getAbstractFileByPath(image);
+  if (direct instanceof TFile) {
+    return direct;
+  }
+  const fromLink = plugin.app.metadataCache?.getFirstLinkpathDest?.(image, sourcePath);
+  if (fromLink instanceof TFile) {
+    return fromLink;
+  }
+  const slash = sourcePath.lastIndexOf("/");
+  const noteDir = slash >= 0 ? sourcePath.slice(0, slash) : "";
+  const joined = noteDir ? `${noteDir}/${image}` : image;
+  const relative = plugin.app.vault.getAbstractFileByPath(joined);
+  return relative instanceof TFile ? relative : null;
 }
 
 async function handleAction(
@@ -283,6 +303,7 @@ async function refreshEmbed(
       settings: plugin.settings,
       vault: plugin.app.vault,
       app: plugin.app,
+      sourcePath: range.file.path,
       persistCache: () => plugin.saveSettings(),
     });
     const content = await plugin.app.vault.read(range.file);

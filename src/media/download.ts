@@ -1,8 +1,63 @@
-import { requestUrl as defaultRequestUrl, type App, type Vault } from "obsidian";
+import { requestUrl as defaultRequestUrl, type App, type TFile, type Vault } from "obsidian";
 import type { EmbedLinkSettings } from "../types";
 
 export function normalizeFolder(path: string): string {
   return path.replace(/\\/g, "/").replace(/\/+/g, "/").replace(/^\/+|\/+$/g, "");
+}
+
+function normalizeVaultPath(path: string): string {
+  return path.replace(/\\/g, "/").replace(/\/+/g, "/").replace(/^\/+/, "");
+}
+
+/** Note-relative path the way Obsidian wiki links usually look (e.g. `attachments/a.jpg`). */
+export function pathRelativeToNote(vaultPath: string, notePath: string): string {
+  const filePath = normalizeVaultPath(vaultPath);
+  const note = normalizeVaultPath(notePath);
+  const slash = note.lastIndexOf("/");
+  const noteDir = slash >= 0 ? note.slice(0, slash) : "";
+  if (!noteDir) {
+    return filePath;
+  }
+  const prefix = `${noteDir}/`;
+  if (filePath.startsWith(prefix)) {
+    return filePath.slice(prefix.length);
+  }
+  return filePath;
+}
+
+/**
+ * Convert a vault path into the path written into embed source.
+ * Prefer Obsidian `fileToLinktext` (matches paste-image behavior); fall back to stripping the note folder.
+ */
+export function toEmbedImagePath(vaultPath: string, sourcePath?: string, app?: App): string {
+  if (!vaultPath || /^(https?:|data:|app:)/i.test(vaultPath)) {
+    return vaultPath;
+  }
+  const notePath = sourcePath ?? app?.workspace?.getActiveFile()?.path;
+  if (!notePath) {
+    return normalizeVaultPath(vaultPath);
+  }
+  const file = app?.vault?.getAbstractFileByPath?.(vaultPath);
+  const fileToLinktext = (
+    app as App & {
+      metadataCache?: {
+        fileToLinktext?: (file: TFile, source: string, omitMd?: boolean) => string;
+      };
+    }
+  )?.metadataCache?.fileToLinktext;
+  if (file && typeof fileToLinktext === "function") {
+    try {
+      return fileToLinktext.call(
+        (app as App & { metadataCache: unknown }).metadataCache,
+        file as TFile,
+        notePath,
+        true,
+      );
+    } catch {
+      // fall through
+    }
+  }
+  return pathRelativeToNote(vaultPath, notePath);
 }
 
 function joinPath(folder: string, fileName: string): string {

@@ -58,6 +58,7 @@ export default class EmbedLinkPlugin extends Plugin {
       settings: this.settings,
       vault: this.app.vault,
       app: this.app,
+      sourcePath: this.app.workspace.getActiveFile()?.path,
       persistCache: () => this.saveSettings(),
     };
     try {

@@ -2,7 +2,7 @@ import { requestUrl as defaultRequestUrl } from "obsidian";
 import { getCached, setCached } from "../cache/store";
 import type { WebPageCardData } from "../embed/serialize";
 import { getAspectRatio } from "../media/aspect-ratio";
-import { downloadImageToVault, resolveImageFolderPath } from "../media/download";
+import { downloadImageToVault, resolveImageFolderPath, toEmbedImagePath } from "../media/download";
 import type { ParseOptions } from "./types";
 
 export async function applyMediaSideEffects(
@@ -65,6 +65,10 @@ export async function applyMediaSideEffects(
       }
     }
   }
+
+  // Match Obsidian paste-image: write note-relative paths into embed source.
+  // Cache keeps vault-absolute paths for reliable reuse.
+  result.image = toEmbedImagePath(result.image, options.sourcePath, options.app);
 
   return result;
 }

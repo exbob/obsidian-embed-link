@@ -8,6 +8,8 @@ export interface ParseOptions {
   settings: EmbedLinkSettings;
   vault: Vault;
   app?: App;
+  /** Note path used to relativize downloaded image paths (Obsidian link style). */
+  sourcePath?: string;
   requestUrl?: typeof requestUrl;
   persistCache?: () => void | Promise<void>;
   mediaHelpers?: MediaHelpers;

@@ -55,6 +55,7 @@ async function replacePastedUrl(
         settings: plugin.settings,
         vault: plugin.app.vault,
         app: plugin.app,
+        sourcePath: plugin.app.workspace.getActiveFile()?.path,
         persistCache: () => plugin.saveSettings(),
       });
       editor.replaceRange(serializeEmbedBlock(data), start, end);
@@ -71,6 +72,7 @@ async function replacePastedUrl(
       settings: { ...plugin.settings, downloadImages: false },
       vault: plugin.app.vault,
       app: plugin.app,
+      sourcePath: plugin.app.workspace.getActiveFile()?.path,
       persistCache: () => plugin.saveSettings(),
     });
     title = data.title;
