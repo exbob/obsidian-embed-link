@@ -151,6 +151,25 @@ describe("MicroLinkParser", () => {
       }),
     );
   });
+
+  it("throws when HTTP 200 payload has status fail", async () => {
+    const requestUrl = vi.fn(async () => ({
+      json: {
+        status: "fail",
+        code: "EFATAL",
+        data: { url: "https://example.com" },
+      },
+      text: "",
+      arrayBuffer: new ArrayBuffer(0),
+    }));
+    await expect(
+      parseUrlWith(
+        "microlink",
+        "https://example.com",
+        parseOptions({ requestUrl: withRequestUrl(requestUrl) }),
+      ),
+    ).rejects.toThrow();
+  });
 });
 
 describe("parseUrl", () => {

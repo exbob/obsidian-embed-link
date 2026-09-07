@@ -16,6 +16,8 @@ interface MicroLinkData {
 }
 
 interface MicroLinkResponse {
+  status?: string;
+  code?: string;
   data?: MicroLinkData;
 }
 
@@ -33,6 +35,9 @@ export class MicroLinkParser extends Parser {
 
   process(data: unknown): { title: string; image: string; description: string } {
     const payload = data as MicroLinkResponse | null;
+    if (payload?.status != null && payload.status !== "success") {
+      throw new Error(payload.code ? `MicroLink ${payload.code}` : "MicroLink request failed");
+    }
     if (!payload?.data) {
       throw new Error("Invalid MicroLink response");
     }
