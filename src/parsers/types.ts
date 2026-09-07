@@ -1,4 +1,4 @@
-import type { requestUrl, Vault } from "obsidian";
+import type { App, requestUrl, Vault } from "obsidian";
 import type { EmbedLinkSettings } from "../types";
 import type { WebPageCardData } from "../embed/serialize";
 
@@ -7,12 +7,14 @@ export type ParserName = "local" | "microlink";
 export interface ParseOptions {
   settings: EmbedLinkSettings;
   vault: Vault;
+  app?: App;
   requestUrl?: typeof requestUrl;
+  persistCache?: () => void | Promise<void>;
+  mediaHelpers?: MediaHelpers;
 }
 
 export type UrlParser = (url: string) => Promise<WebPageCardData>;
 
-/** Task 6 wires download + aspect ratio; parsers no-op when helpers are absent. */
 export interface MediaHelpers {
   downloadImageToVault?(
     imageUrl: string,

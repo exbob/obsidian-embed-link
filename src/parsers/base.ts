@@ -1,12 +1,59 @@
 import { requestUrl as defaultRequestUrl } from "obsidian";
+import { getCached, setCached } from "../cache/store";
 import type { WebPageCardData } from "../embed/serialize";
+import { getAspectRatio } from "../media/aspect-ratio";
+import { downloadImageToVault, resolveImageFolderPath } from "../media/download";
 import type { ParseOptions } from "./types";
 
 export async function applyMediaSideEffects(
   data: WebPageCardData,
-  _options: ParseOptions,
+  options: ParseOptions,
 ): Promise<WebPageCardData> {
-  return data;
+  const result: WebPageCardData = { ...data };
+  const requestUrlFn = options.requestUrl ?? defaultRequestUrl;
+  const download =
+    options.mediaHelpers?.downloadImageToVault ??
+    ((imageUrl, vault, folderPath) =>
+      downloadImageToVault(imageUrl, vault, folderPath, requestUrlFn));
+  const measure =
+    options.mediaHelpers?.getImageAspectRatio ??
+    ((imageUrl: string) =>
+      getAspectRatio(imageUrl, options.settings.useCache ? options.settings.cache : {}, {
+        requestUrl: requestUrlFn,
+        vault: options.vault,
+      }));
+
+  if (options.settings.downloadImages && result.image) {
+    try {
+      const folder = resolveImageFolderPath(options.settings, options.app);
+      result.image = await download(result.image, options.vault, folder);
+    } catch {
+      // keep original URL
+    }
+  }
+
+  if (options.settings.keepAspectRatio && result.image) {
+    const cacheKey = result.image;
+    const cached = getCached(options.settings, cacheKey);
+    if (typeof cached === "number") {
+      result.aspectRatio = cached;
+    } else {
+      try {
+        const ratio = await measure(result.image);
+        if (ratio !== undefined) {
+          result.aspectRatio = ratio;
+          setCached(options.settings, cacheKey, ratio);
+          if (options.settings.useCache) {
+            await options.persistCache?.();
+          }
+        }
+      } catch {
+        // omit aspectRatio
+      }
+    }
+  }
+
+  return result;
 }
 
 export abstract class Parser {
