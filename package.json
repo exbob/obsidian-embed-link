@@ -15,6 +15,6 @@
     "happy-dom": "latest",
     "obsidian": "latest",
     "typescript": "latest",
-    "vitest": "latest"
+    "vitest": "^3.2.7"
   }
 }

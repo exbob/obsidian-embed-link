@@ -22,6 +22,12 @@ if [[ $# -ne 0 ]]; then
   usage
 fi
 
+node_major="$(node -p "process.versions.node.split('.')[0]")"
+if [[ "$node_major" -lt 18 ]]; then
+  printf '错误: 需要 Node.js 18 或更高版本（当前: %s）\n' "$(node -v)" >&2
+  exit 1
+fi
+
 npm run build
 
 STAGING_DIR="$(mktemp -d "$ROOT_DIR/embed-link.staging.XXXXXX")"
