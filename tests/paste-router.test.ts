@@ -183,6 +183,7 @@ describe("registerPasteDropRouter", () => {
     try {
       const plugin = makePlugin();
       plugin.settings.autoEmbed = true;
+      plugin.settings.downloadImages = true;
       registerPasteDropRouter(plugin);
       const editor = makeEditor("", 0);
       const evt = clipboardEvent("https://example.com");
@@ -194,6 +195,59 @@ describe("registerPasteDropRouter", () => {
       expect(editor.replaceRange.mock.calls[0][0]).toBe(serializeEmbedBlock(card));
       expect(plugin.pasteInfo.trigger).toBe(false);
       expect(parseSpy).toHaveBeenCalled();
+      expect(parseSpy.mock.calls[0][1].settings.downloadImages).toBe(true);
+    } finally {
+      parseSpy.mockRestore();
+    }
+  });
+
+  it("autoEmbed URL paste restores the URL when parseUrl fails", async () => {
+    const parseSpy = vi.spyOn(parsers, "parseUrl").mockRejectedValue(new Error("timeout"));
+    try {
+      const plugin = makePlugin();
+      plugin.settings.autoEmbed = true;
+      registerPasteDropRouter(plugin);
+      const editor = makeEditor("", 0);
+      const evt = clipboardEvent("https://example.com");
+      (plugin.app as WorkspaceApp).workspace.trigger("editor-paste", evt, editor);
+      expect(evt.preventDefault).toHaveBeenCalled();
+      await vi.waitFor(() => {
+        expect(noticeLog()).toContain(t("notice.parseFailed", { detail: "timeout" }));
+      });
+      expect(editor.getLine()).toContain("https://example.com");
+    } finally {
+      parseSpy.mockRestore();
+    }
+  });
+
+  it("does not apply downloadImages when resolving title for video or markdown", async () => {
+    const card = {
+      title: "Example",
+      image: "https://example.com/img.png",
+      description: "Hello",
+      url: "https://example.com",
+    };
+    const parseSpy = vi.spyOn(parsers, "parseUrl").mockResolvedValue(card);
+    try {
+      for (const id of ["video-preview", "markdown-link"] as const) {
+        parseSpy.mockClear();
+        const plugin = makePlugin();
+        plugin.settings.downloadImages = true;
+        plugin.pasteInfo = { trigger: true, text: "https://example.com" };
+        const suggest = new UrlSuggest(plugin.app, plugin);
+        const editor = makeEditor("https://example.com", "https://example.com".length);
+        const trigger = suggest.onTrigger(editor.getCursor(), editor as never, null);
+        expect(trigger).not.toBeNull();
+        const item = suggest.getSuggestions().find((choice) => choice.id === id);
+        expect(item).toBeDefined();
+        suggest.selectSuggestion(item!);
+        await vi.waitFor(() => {
+          expect(editor.replaceRange).toHaveBeenCalled();
+        });
+        expect(parseSpy).toHaveBeenCalled();
+        expect(parseSpy.mock.calls[0][1].settings.downloadImages).toBe(false);
+        expect(plugin.settings.downloadImages).toBe(true);
+      }
     } finally {
       parseSpy.mockRestore();
     }

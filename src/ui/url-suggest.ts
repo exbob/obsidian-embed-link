@@ -101,13 +101,14 @@ export class UrlSuggest extends EditorSuggest<UrlMenuItem> {
       } catch (error) {
         const detail = error instanceof Error ? error.message : String(error);
         new Notice(t("notice.parseFailed", { detail }));
+        editor.replaceRange(url, start, end);
       }
       return;
     }
     let title = "";
     try {
       const data = await parseUrl(url, {
-        settings: this.plugin.settings,
+        settings: { ...this.plugin.settings, downloadImages: false },
         vault: this.plugin.app.vault,
         app: this.plugin.app,
         persistCache: () => this.plugin.saveSettings(),
