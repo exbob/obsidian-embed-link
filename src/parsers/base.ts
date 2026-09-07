@@ -24,9 +24,22 @@ export async function applyMediaSideEffects(
       }));
 
   if (options.settings.downloadImages && result.image) {
+    const remoteUrl = result.image;
     try {
-      const folder = resolveImageFolderPath(options.settings, options.app);
-      result.image = await download(result.image, options.vault, folder);
+      const cachedPath = getCached(options.settings, remoteUrl);
+      if (typeof cachedPath === "string" && options.vault.getAbstractFileByPath(cachedPath)) {
+        result.image = cachedPath;
+      } else {
+        const folder = resolveImageFolderPath(options.settings, options.app);
+        const dest = await download(remoteUrl, options.vault, folder);
+        result.image = dest;
+        if (dest !== remoteUrl) {
+          setCached(options.settings, remoteUrl, dest);
+          if (options.settings.useCache) {
+            await options.persistCache?.();
+          }
+        }
+      }
     } catch {
       // keep original URL
     }

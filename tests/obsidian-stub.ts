@@ -176,12 +176,20 @@ export class Setting {
 }
 
 export class Vault {
+  private readonly existingFiles = new Map<string, TFile>();
+
+  addExistingFile(path: string): TFile {
+    const file = new TFile(path);
+    this.existingFiles.set(path, file);
+    return file;
+  }
+
   async create(path: string, _data: string): Promise<TFile> {
-    return new TFile(path);
+    return this.addExistingFile(path);
   }
 
   getAbstractFileByPath(path: string): TFile | null {
-    return new TFile(path);
+    return this.existingFiles.get(path) ?? null;
   }
 }
 

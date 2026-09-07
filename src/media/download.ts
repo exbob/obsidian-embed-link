@@ -87,6 +87,33 @@ export function resolveImageFolderPath(settings: EmbedLinkSettings, app?: App): 
   return getObsidianAttachmentFolder(app);
 }
 
+function isAlreadyExistsError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /already exists/i.test(message);
+}
+
+async function ensureFolder(vault: Vault, folderPath: string): Promise<void> {
+  const folder = normalizeFolder(folderPath);
+  if (!folder) {
+    return;
+  }
+  const parts = folder.split("/");
+  let current = "";
+  for (const part of parts) {
+    current = current ? `${current}/${part}` : part;
+    if (vault.getAbstractFileByPath(current)) {
+      continue;
+    }
+    try {
+      await vault.createFolder(current);
+    } catch (error) {
+      if (!isAlreadyExistsError(error)) {
+        throw error;
+      }
+    }
+  }
+}
+
 export async function downloadImageToVault(
   url: string,
   vault: Vault,
@@ -97,16 +124,9 @@ export async function downloadImageToVault(
     return url;
   }
 
-  const folder = normalizeFolder(folderPath);
-  if (folder) {
-    try {
-      await vault.createFolder(folder);
-    } catch {
-      // folder already exists
-    }
-  }
+  await ensureFolder(vault, folderPath);
 
-  const dest = uniqueFilePath(vault, folder, fileNameFromImageUrl(url));
+  const dest = uniqueFilePath(vault, normalizeFolder(folderPath), fileNameFromImageUrl(url));
   const response = await requestUrlFn({ url });
   await vault.createBinary(dest, response.arrayBuffer);
   return dest;

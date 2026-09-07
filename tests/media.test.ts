@@ -29,6 +29,36 @@ class MemoryVault {
   }
 }
 
+/** Mimics Obsidian: parent folders must exist; duplicate folders throw. */
+class NestedFolderVault extends MemoryVault {
+  folders = new Set<string>();
+  createFolderError: Error | null = null;
+
+  override getAbstractFileByPath(path: string) {
+    if (this.folders.has(path)) {
+      return { path };
+    }
+    return super.getAbstractFileByPath(path);
+  }
+
+  override async createFolder(path: string): Promise<void> {
+    if (this.createFolderError) {
+      throw this.createFolderError;
+    }
+    const slash = path.lastIndexOf("/");
+    if (slash >= 0) {
+      const parent = path.slice(0, slash);
+      if (!this.folders.has(parent)) {
+        throw new Error(`Folder does not exist: ${parent}`);
+      }
+    }
+    if (this.folders.has(path)) {
+      throw new Error("Folder already exists.");
+    }
+    this.folders.add(path);
+  }
+}
+
 function pngBuffer(width: number, height: number): ArrayBuffer {
   const bytes = new Uint8Array(24);
   bytes[0] = 0x89;
@@ -98,6 +128,61 @@ describe("downloadImageToVault", () => {
     );
     expect(path).toBe("embeds/hero 1.png");
     expect(vault.files.has("embeds/hero 1.png")).toBe(true);
+  });
+
+  it("creates nested folders segment by segment", async () => {
+    const vault = new NestedFolderVault();
+    const requestUrl = vi.fn(async () => ({
+      json: {},
+      text: "",
+      arrayBuffer: pngBuffer(2, 1),
+    }));
+    const path = await downloadImageToVault(
+      "https://cdn.example/cover.png",
+      vault as unknown as Vault,
+      "embeds/covers",
+      requestUrl as never,
+    );
+    expect(path).toBe("embeds/covers/cover.png");
+    expect(vault.folders.has("embeds")).toBe(true);
+    expect(vault.folders.has("embeds/covers")).toBe(true);
+    expect(vault.files.has("embeds/covers/cover.png")).toBe(true);
+  });
+
+  it("ignores already-exists errors when the folder is present", async () => {
+    const vault = new NestedFolderVault();
+    vault.folders.add("embeds");
+    const requestUrl = vi.fn(async () => ({
+      json: {},
+      text: "",
+      arrayBuffer: pngBuffer(2, 1),
+    }));
+    const path = await downloadImageToVault(
+      "https://cdn.example/cover.png",
+      vault as unknown as Vault,
+      "embeds",
+      requestUrl as never,
+    );
+    expect(path).toBe("embeds/cover.png");
+  });
+
+  it("does not swallow non-exists createFolder failures", async () => {
+    const vault = new NestedFolderVault();
+    vault.createFolderError = new Error("permission denied");
+    const requestUrl = vi.fn(async () => ({
+      json: {},
+      text: "",
+      arrayBuffer: pngBuffer(2, 1),
+    }));
+    await expect(
+      downloadImageToVault(
+        "https://cdn.example/cover.png",
+        vault as unknown as Vault,
+        "embeds",
+        requestUrl as never,
+      ),
+    ).rejects.toThrow("permission denied");
+    expect(vault.files.size).toBe(0);
   });
 });
 
@@ -192,5 +277,76 @@ describe("applyMediaSideEffects", () => {
     expect(result.aspectRatio).toBe(3);
     expect(settings.cache["https://cdn.example/wide.png"]).toBe(3);
     expect(persistCache).toHaveBeenCalled();
+  });
+
+  it("reuses a cached vault path when useCache is on", async () => {
+    const vault = new MemoryVault();
+    const persistCache = vi.fn();
+    const requestUrl = vi.fn(async () => ({
+      json: {},
+      text: "",
+      arrayBuffer: pngBuffer(4, 2),
+    }));
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      downloadImages: true,
+      keepAspectRatio: false,
+      useCache: true,
+      imageFolderPath: "embeds",
+      cache: {} as Record<string, unknown>,
+    };
+    const options: ParseOptions = {
+      settings,
+      vault: vault as unknown as Vault,
+      requestUrl: requestUrl as never,
+      persistCache,
+    };
+    const card = {
+      title: "T",
+      image: "https://cdn.example/cover.png",
+      description: "",
+      url: "https://example.com",
+    };
+    const first = await applyMediaSideEffects(card, options);
+    const second = await applyMediaSideEffects(card, options);
+    expect(first.image).toBe("embeds/cover.png");
+    expect(second.image).toBe("embeds/cover.png");
+    expect(vault.files.has("embeds/cover 1.png")).toBe(false);
+    expect(requestUrl).toHaveBeenCalledTimes(1);
+    expect(settings.cache["https://cdn.example/cover.png"]).toBe("embeds/cover.png");
+    expect(persistCache).toHaveBeenCalled();
+  });
+
+  it("redownloads when the cached vault file is gone", async () => {
+    const vault = new MemoryVault();
+    const requestUrl = vi.fn(async () => ({
+      json: {},
+      text: "",
+      arrayBuffer: pngBuffer(4, 2),
+    }));
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      downloadImages: true,
+      keepAspectRatio: false,
+      useCache: true,
+      imageFolderPath: "embeds",
+      cache: { "https://cdn.example/cover.png": "embeds/cover.png" } as Record<string, unknown>,
+    };
+    const result = await applyMediaSideEffects(
+      {
+        title: "T",
+        image: "https://cdn.example/cover.png",
+        description: "",
+        url: "https://example.com",
+      },
+      {
+        settings,
+        vault: vault as unknown as Vault,
+        requestUrl: requestUrl as never,
+      },
+    );
+    expect(result.image).toBe("embeds/cover.png");
+    expect(vault.files.has("embeds/cover.png")).toBe(true);
+    expect(requestUrl).toHaveBeenCalledTimes(1);
   });
 });
