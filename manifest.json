@@ -1,7 +1,7 @@
 {
   "id": "embed-link",
   "name": "Embed Link",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "minAppVersion": "1.7.2",
   "description": "Paste and drop URLs and files as web page cards, video previews, or filename links.",
   "author": "LiShaocheng",
